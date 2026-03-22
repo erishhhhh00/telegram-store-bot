@@ -216,4 +216,17 @@ bot.command('helpadmin', (ctx) => {
   ctx.reply("🛠 *Admin Commands*\n/addproduct Title | Desc | Price | Type | Link\n/broadcast [message]\n/setqr [Image URL]");
 });
 
+// Fallback for normal messages like "hi" or "hello"
+bot.on('message', async (ctx, next) => {
+  if (ctx.message && ctx.message.text && !ctx.message.text.startsWith('/')) {
+    const txt = ctx.message.text.toLowerCase();
+    if (txt === 'hi' || txt === 'hello' || txt === 'hey') {
+      return ctx.reply("Hello ji! 👋 Humare digital store mein aapka swagat hai. \n\nProducts dekhne ke liye yahan click karein 👉 /start");
+    } else {
+      return ctx.reply("Main ek Automated Store Bot hoon 🤖. \n\nDirect menu dekhne ke liye kripya 👉 /start bhejein.");
+    }
+  }
+  return next();
+});
+
 module.exports = bot;
