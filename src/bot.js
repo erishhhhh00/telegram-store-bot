@@ -80,8 +80,12 @@ bot.action(/buy_(.+)/, async (ctx) => {
               `2. After successful payment, *send the screenshot of the payment to this bot*.\n` +
               `I will notify the admin for verification. Once approved, you will auto-receive the product!`;
 
-  if (config.UPI_QR_URL) {
-    await ctx.replyWithPhoto(config.UPI_QR_URL, { caption: msg, parse_mode: 'Markdown' });
+  if (config.UPI_QR_URL && config.UPI_QR_URL.startsWith('http')) {
+    try {
+      await ctx.replyWithPhoto(config.UPI_QR_URL, { caption: msg, parse_mode: 'Markdown' });
+    } catch(err) {
+      await ctx.replyWithMarkdown(msg + "\n\n_(Note: QR image link is invalid, so image could not load. Please pay using the UPI ID above)_");
+    }
   } else {
     await ctx.replyWithMarkdown(msg);
   }
