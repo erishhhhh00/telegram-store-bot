@@ -7,6 +7,8 @@ const orderSchema = new mongoose.Schema({
   status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
   screenshotId: { type: String }, // Telegram File ID for the proof
   amount: { type: Number, required: true },
+  originalAmount: { type: Number }, // Price before coupon discount
+  couponApplied: { type: String, default: '' }, // Coupon code that was used
   paymentMethod: { type: String, enum: ['qr', 'cashfree'], default: 'qr' }
 }, { timestamps: true });
 

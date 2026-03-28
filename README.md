@@ -42,6 +42,8 @@ Once Vercel gives you your domain (e.g., `https://my-store.vercel.app`), you mus
 
 ## 🛠 Admin Commands (Send directly in Bot)
 - `/addproduct Title | Description | Price | Type | DeliveryLink`
+- With coupon: `/addproduct Title | Desc | Price | Type | Link | CouponCode | DiscountPercent`
+  - Example: `/addproduct My Course | Best course ever | 900 | course | https://link.com | SAVE20 | 20`
 - `/broadcast Your Message`
 - `/setqr https://link-to-your-new-qr.png`
 - `/helpadmin`
