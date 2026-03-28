@@ -163,7 +163,8 @@ bot.action(/^cat_(.+)$/, async (ctx) => {
       `${typeEmoji} *${p.title}*\n` +
       `━━━━━━━━━━━━━━━━━━━━━\n` +
       `📝 _${p.description}_\n\n` +
-      `💰 *Price:* ₹${p.price}` +
+      `💰 *Price:* ₹${p.price}\n` +
+      `🆔 *ID:* \`${p.productId || p._id}\`` +
       couponTag;
 
     const buttons = Markup.inlineKeyboard([
@@ -210,7 +211,7 @@ async function performSearch(ctx, keyword) {
 
   for (const p of products) {
     const typeEmoji = p.type === 'course' ? '📚' : p.type === 'apk' ? '📱' : '💾';
-    const caption = `${typeEmoji} *${p.title}* — ₹${p.price}\n_${p.description}_`;
+    const caption = `${typeEmoji} *${p.title}* — ₹${p.price}\n_${p.description}_\n🆔 *ID:* \`${p.productId || p._id}\``;
     const buttons = Markup.inlineKeyboard([
       [Markup.button.callback(`🛒 Buy Now — ₹${p.price}`, `buy_${p._id}`)]
     ]);
