@@ -709,6 +709,14 @@ bot.command('addproduct', async (ctx) => {
   }
 
   try {
+    const [title, description, price, type, deliveryLink] = args;
+    
+    // Validate type enum
+    const validTypes = ['course', 'data', 'apk'];
+    if (!validTypes.includes(type.toLowerCase())) {
+      return ctx.reply(`❌ *Invalid Type!*\n\nYou wrote: \`${type}\`\nIt must be exactly one of these: \`course\`, \`data\`, or \`apk\``, { parse_mode: 'Markdown' });
+    }
+
     let imageUrl = '';
     let couponCode = '';
     let couponDiscount = 0;
