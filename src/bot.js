@@ -4,6 +4,7 @@ const dbConnect = require('./db');
 const User = require('./models/User');
 const Product = require('./models/Product');
 const Order = require('./models/Order');
+const Category = require('./models/Category');
 
 if (!config.BOT_TOKEN) throw new Error("BOT_TOKEN is required!");
 const bot = new Telegraf(config.BOT_TOKEN);
@@ -12,6 +13,7 @@ const bot = new Telegraf(config.BOT_TOKEN);
 const couponWaitingUsers = new Map();   // userId → orderId
 const refundWaitingUsers = new Map();   // userId → orderId
 const searchWaitingUsers = new Set();   // userId set
+const pendingProductData = new Map();   // userId → product data (waiting for category selection)
 
 // ─── MIDDLEWARE: ensure user exists in DB ───
 bot.use(async (ctx, next) => {
@@ -111,19 +113,26 @@ bot.action('action_products', async (ctx) => {
   }
 });
 
+// ─── Helper: Get categories from DB ───
+async function getCategories() {
+  await dbConnect();
+  const cats = await Category.find({}).sort({ createdAt: 1 });
+  return cats.map(c => c.name);
+}
+
 // ─── Browse by Category ───
 bot.action('action_categories', async (ctx) => {
   await dbConnect();
+  const categories = await getCategories();
   const products = await Product.find({ isActive: true });
-  const categories = [...new Set(products.map(p => p.category))];
 
   if (categories.length === 0) {
-    return ctx.reply("😔 No categories available yet.");
+    return ctx.reply("😔 No categories yet. Admin can add via /addcategory");
   }
 
   const buttons = categories.map(cat => {
     const count = products.filter(p => p.category === cat).length;
-    return [Markup.button.callback(`📂 ${cat} (${count})`, `cat_${cat}`)];
+    return [Markup.button.callback(`${cat} (${count})`, `cat_${cat}`)];
   });
   buttons.push([Markup.button.callback('⬅️ Back to Menu', 'action_back_start')]);
 
@@ -641,51 +650,133 @@ bot.command('dashboard', async (ctx) => {
 // ─── /addproduct ───
 bot.command('addproduct', async (ctx) => {
   if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return;
-  // format: /addproduct Title | Desc | Price | Type | Link | ImageURL | Category | CouponCode | Discount%
-  const rawText = ctx.message.text.replace('/addproduct ', '');
-  const args = rawText.split('|').map(s => s.trim());
-  if (args.length < 5) {
+  const rawText = ctx.message.text.replace('/addproduct ', '').trim();
+
+  // Show format guide if no args
+  if (!rawText || rawText === '/addproduct') {
     return ctx.replyWithMarkdown(
-      `📝 *Add Product Format:*\n\n` +
-      `\`/addproduct Title | Desc | Price | Type | Link\`\n\n` +
-      `*Full format with all options:*\n` +
-      `\`/addproduct Title | Desc | Price | Type | Link | ImageURL | Category | CouponCode | Discount%\`\n\n` +
-      `*Types:* course, data, apk\n\n` +
-      `*Example:*\n` +
-      `\`/addproduct Java Course | Complete Java | 900 | course | https://link.com | https://img.com/java.jpg | Programming | JAVA20 | 20\``
+      `━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📝 *ADD PRODUCT GUIDE*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `*Format (required fields):*\n` +
+      `\`/addproduct Title | Description | Price | Type | DeliveryLink\`\n\n` +
+      `*Format (all fields):*\n` +
+      `\`/addproduct Title | Description | Price | Type | DeliveryLink | ImageURL | CouponCode | Discount%\`\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📋 *FIELD DETAILS:*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `1️⃣ *Title* — Product name\n` +
+      `2️⃣ *Description* — Short info (2-3 lines)\n` +
+      `3️⃣ *Price* — Number only (e.g. 499)\n` +
+      `4️⃣ *Type* — \`course\` / \`apk\` / \`data\`\n` +
+      `5️⃣ *DeliveryLink* — Download link (user gets after payment)\n` +
+      `6️⃣ *ImageURL* — Product thumbnail (optional)\n` +
+      `7️⃣ *CouponCode* — e.g. SAVE20 (optional)\n` +
+      `8️⃣ *Discount%* — e.g. 20 (optional)\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━\n` +
+      `✏️ *EXAMPLES:*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `*Basic:*\n` +
+      `\`/addproduct Java Course | Complete Java Bootcamp | 900 | course | https://link.com\`\n\n` +
+      `*With image:*\n` +
+      `\`/addproduct Spotify MOD | Ad-free premium | 49 | apk | https://link.com | https://img.com/pic.jpg\`\n\n` +
+      `*With coupon:*\n` +
+      `\`/addproduct UPSC Notes | Full syllabus PDF | 299 | data | https://link.com | https://img.com/pic.jpg | UPSC30 | 30\`\n\n` +
+      `⚡ _Category select buttons will appear after you send!_`
     );
   }
-  
+
+  const args = rawText.split('|').map(s => s.trim());
+  if (args.length < 5) {
+    return ctx.reply("❌ Minimum 5 fields required: Title | Desc | Price | Type | Link\n\nType /addproduct alone to see the full guide.");
+  }
+
   try {
-    await dbConnect();
-    const [title, description, price, type, deliveryLink, imageUrl, category, couponCode, couponDiscount] = args;
+    const [title, description, price, type, deliveryLink, imageUrl, couponCode, couponDiscount] = args;
     const productData = {
       title,
       description,
       price: Number(price),
       type,
       deliveryLink,
-      imageUrl: imageUrl || '',
-      category: category || 'General'
+      imageUrl: imageUrl || ''
     };
-    
+
     if (couponCode && couponDiscount) {
       productData.couponCode = couponCode.toUpperCase();
       productData.couponDiscount = Number(couponDiscount);
     }
 
-    const product = await Product.create(productData);
-    let successMsg = `✅ *Product Added!*\n━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    successMsg += `📦 *${title}*\n💰 Price: ₹${price}\n📂 Category: ${category || 'General'}\n🆔 ID: \`${product._id}\``;
-    if (couponCode && couponDiscount) {
-      successMsg += `\n🎟️ Coupon: ${couponCode.toUpperCase()} → ${couponDiscount}% OFF`;
+    // Store pending product and show category buttons from DB
+    pendingProductData.set(ctx.from.id.toString(), productData);
+    const categories = await getCategories();
+
+    if (categories.length === 0) {
+      return ctx.reply("❌ No categories exist! Add one first with /addcategory");
     }
-    if (imageUrl) {
+
+    const catButtons = categories.map(cat => [
+      Markup.button.callback(cat, `admincat_${cat}`)
+    ]);
+    catButtons.push([Markup.button.callback('❌ Cancel', 'admincat_cancel')]);
+
+    await ctx.replyWithMarkdown(
+      `━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📦 *PRODUCT READY*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `📌 *Title:* ${title}\n` +
+      `📝 *Desc:* ${description}\n` +
+      `💰 *Price:* ₹${price}\n` +
+      `📁 *Type:* ${type}\n` +
+      (imageUrl ? `🖼️ *Image:* Set\n` : '') +
+      (couponCode ? `🎟️ *Coupon:* ${couponCode.toUpperCase()} → ${couponDiscount}% OFF\n` : '') +
+      `\n👇 *Select category to add this product:*`,
+      Markup.inlineKeyboard(catButtons)
+    );
+  } catch (e) {
+    ctx.reply("❌ Error: " + e.message);
+  }
+});
+
+// ─── Category selection for addproduct ───
+bot.action(/admincat_(.+)/, async (ctx) => {
+  if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return ctx.answerCbQuery('Not Authorized');
+  const selected = ctx.match[1];
+  const userId = ctx.from.id.toString();
+
+  if (selected === 'cancel') {
+    pendingProductData.delete(userId);
+    return ctx.editMessageText('❌ Product addition cancelled.');
+  }
+
+  const productData = pendingProductData.get(userId);
+  if (!productData) {
+    return ctx.editMessageText('❌ No pending product found. Use /addproduct again.');
+  }
+
+  try {
+    await dbConnect();
+    productData.category = selected;
+    const product = await Product.create(productData);
+    pendingProductData.delete(userId);
+
+    let successMsg =
+      `━━━━━━━━━━━━━━━━━━━━━\n` +
+      `✅ *PRODUCT ADDED!*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `📦 *${productData.title}*\n` +
+      `💰 Price: ₹${productData.price}\n` +
+      `📂 Category: ${selected}\n` +
+      `🆔 ID: \`${product._id}\``;
+    if (productData.couponCode) {
+      successMsg += `\n🎟️ Coupon: ${productData.couponCode} → ${productData.couponDiscount}% OFF`;
+    }
+    if (productData.imageUrl) {
       successMsg += `\n🖼️ Image: Set`;
     }
-    await ctx.replyWithMarkdown(successMsg);
+    await ctx.editMessageText(successMsg, { parse_mode: 'Markdown' });
   } catch (e) {
-    ctx.reply("❌ Error adding product: " + e.message);
+    ctx.editMessageText('❌ Error adding product: ' + e.message);
   }
 });
 
@@ -778,6 +869,74 @@ bot.command('toggleproduct', async (ctx) => {
   }
 });
 
+// ─── /addcategory ───
+bot.command('addcategory', async (ctx) => {
+  if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return;
+  const name = ctx.message.text.replace('/addcategory ', '').trim();
+  if (!name || name === '/addcategory') {
+    return ctx.reply("Usage: /addcategory 📂 Category Name\n\nExample: /addcategory 🎵 Songs Collection");
+  }
+  try {
+    await dbConnect();
+    await Category.create({ name });
+    const allCats = await getCategories();
+    let msg = `✅ *Category Added:* ${name}\n\n📂 *All Categories:*\n`;
+    allCats.forEach((c, i) => { msg += `   ${i + 1}. ${c}\n`; });
+    await ctx.replyWithMarkdown(msg);
+  } catch (e) {
+    if (e.code === 11000) return ctx.reply("❌ This category already exists!");
+    ctx.reply("❌ Error: " + e.message);
+  }
+});
+
+// ─── /deletecategory ───
+bot.command('deletecategory', async (ctx) => {
+  if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return;
+  await dbConnect();
+  const categories = await getCategories();
+  if (categories.length === 0) return ctx.reply("No categories to delete.");
+
+  const buttons = categories.map(cat => [
+    Markup.button.callback(`🗑️ ${cat}`, `delcat_${cat}`)
+  ]);
+  buttons.push([Markup.button.callback('⬅️ Cancel', 'delcat_cancel')]);
+
+  await ctx.replyWithMarkdown(
+    `🗑️ *Select a category to delete:*`,
+    Markup.inlineKeyboard(buttons)
+  );
+});
+
+bot.action(/delcat_(.+)/, async (ctx) => {
+  if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return ctx.answerCbQuery('Not Authorized');
+  const selected = ctx.match[1];
+  if (selected === 'cancel') return ctx.editMessageText('❌ Cancelled.');
+
+  try {
+    await dbConnect();
+    await Category.deleteOne({ name: selected });
+    const remaining = await getCategories();
+    let msg = `✅ *Deleted:* ${selected}\n\n📂 *Remaining Categories:*\n`;
+    if (remaining.length === 0) msg += '   _None_';
+    else remaining.forEach((c, i) => { msg += `   ${i + 1}. ${c}\n`; });
+    await ctx.editMessageText(msg, { parse_mode: 'Markdown' });
+  } catch (e) {
+    ctx.editMessageText('❌ Error: ' + e.message);
+  }
+});
+
+// ─── /categories (list all) ───
+bot.command('categories', async (ctx) => {
+  if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return;
+  await dbConnect();
+  const categories = await getCategories();
+  if (categories.length === 0) return ctx.reply("No categories. Use /addcategory to add one.");
+  let msg = `📂 *All Categories:*\n━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  categories.forEach((c, i) => { msg += `${i + 1}. ${c}\n`; });
+  msg += `\n_Use /addcategory or /deletecategory to manage._`;
+  await ctx.replyWithMarkdown(msg);
+});
+
 // ─── /broadcast ───
 bot.command('broadcast', async (ctx) => {
   if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return;
@@ -818,17 +977,19 @@ bot.command('helpadmin', (ctx) => {
     `━━━━━━━━━━━━━━━━━━━━━\n\n` +
     `📊 *Dashboard:*\n` +
     `   /dashboard — Stats & revenue\n\n` +
+    `📂 *Category Management:*\n` +
+    `   /categories — View all categories\n` +
+    `   /addcategory — Add new category\n` +
+    `   /deletecategory — Delete a category\n\n` +
     `📦 *Product Management:*\n` +
-    `   /addproduct — Add new product\n` +
+    `   /addproduct — Add product (shows guide)\n` +
     `   /listproducts — View all products\n` +
     `   /editproduct — Edit product field\n` +
     `   /deleteproduct — Soft delete product\n` +
     `   /toggleproduct — Enable/disable product\n\n` +
     `📢 *Communication:*\n` +
     `   /broadcast — Message all users\n` +
-    `   /setqr — Update QR code image\n\n` +
-    `🎟️ *Product format:*\n` +
-    `   \`Title | Desc | Price | Type | Link | ImageURL | Category | CouponCode | Discount%\``
+    `   /setqr — Update QR code image`
   );
 });
 
