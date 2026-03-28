@@ -5,6 +5,7 @@ const User = require('./models/User');
 const Product = require('./models/Product');
 const Order = require('./models/Order');
 const Category = require('./models/Category');
+const Setting = require('./models/Setting');
 
 if (!config.BOT_TOKEN) throw new Error("BOT_TOKEN is required!");
 const bot = new Telegraf(config.BOT_TOKEN);
@@ -242,11 +243,17 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
     status: 'pending'
   });
 
-  await sendPaymentMessage(ctx, product, order);
+  await sendCheckoutSummary(ctx, product, order);
 });
 
-// ─── Helper: Send Payment Instructions ───
-async function sendPaymentMessage(ctx, product, order) {
+// ─── Helper: Get Dynamic Setting ───
+async function getSetting(key, defaultVal) {
+  const s = await Setting.findOne({ key });
+  return s ? s.value : defaultVal;
+}
+
+// ─── Step 1: Checkout Summary ───
+async function sendCheckoutSummary(ctx, product, order) {
   const amount = order.amount;
   let couponLine = '';
   if (order.couponApplied) {
@@ -258,39 +265,49 @@ async function sendPaymentMessage(ctx, product, order) {
     `🧾 *ORDER SUMMARY*\n` +
     `━━━━━━━━━━━━━━━━━━━━━\n\n` +
     `📦 *Product:* ${product.title}\n` +
-    `${couponLine}💰 *Amount:* ₹${amount}\n` +
-    `🆔 *Order:* \`${order._id}\`\n\n` +
-    `━━━━━━━━━━━━━━━━━━━━━\n` +
-    `💳 *PAYMENT INSTRUCTIONS*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-    `1️⃣ Pay *₹${amount}* to UPI ID:\n   \`${config.UPI_ID}\`\n\n` +
-    `2️⃣ Or scan the QR code below\n\n` +
-    `3️⃣ After payment, *send the screenshot here*\n\n` +
-    `⏱️ Admin will verify within 15 minutes.\n` +
-    `Once approved, you'll auto-receive the product! ✅`;
+    `${couponLine}💰 *Total Amount:* ₹${amount}\n` +
+    `🆔 *Order ID:* \`${order._id}\`\n\n` +
+    `👇 *Please choose an option below:*`;
 
   const actionButtons = [];
   if (product.couponCode && product.couponDiscount > 0 && !order.couponApplied) {
     actionButtons.push([Markup.button.callback('🎟️ Apply Coupon Code', `applycoupon_${order._id}`)]);
   }
+  actionButtons.push([Markup.button.callback('💳 Proceed to Pay', `checkout_${order._id}`)]);
 
-  if (config.UPI_QR_URL && config.UPI_QR_URL.startsWith('http')) {
+  await ctx.replyWithMarkdown(msg, Markup.inlineKeyboard(actionButtons));
+}
+
+// ─── Step 2: Final Payment Screen ───
+bot.action(/^checkout_(.+)$/, async (ctx) => {
+  const orderId = ctx.match[1];
+  await dbConnect();
+  const order = await Order.findById(orderId).populate('product');
+  if (!order) return ctx.reply("❌ Order not found.");
+
+  const upiId = await getSetting('UPI_ID', config.UPI_ID);
+  const upiQr = await getSetting('UPI_QR_URL', config.UPI_QR_URL);
+
+  const msg =
+    `━━━━━━━━━━━━━━━━━━━━━\n` +
+    `💳 *PAYMENT INSTRUCTIONS*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `1️⃣ Pay *₹${order.amount}* to UPI ID:\n   \`${upiId}\`\n\n` +
+    `2️⃣ Or scan the QR code below\n\n` +
+    `3️⃣ After payment, *send the screenshot here*\n\n` +
+    `⏱️ Admin will verify within 15 minutes.\n` +
+    `Once approved, you'll auto-receive the product! ✅`;
+
+  if (upiQr && upiQr.startsWith('http')) {
     try {
-      await ctx.replyWithPhoto(config.UPI_QR_URL, {
-        caption: msg,
-        parse_mode: 'Markdown',
-        ...(actionButtons.length > 0 ? Markup.inlineKeyboard(actionButtons) : {})
-      });
+      await ctx.replyWithPhoto(upiQr, { caption: msg, parse_mode: 'Markdown' });
     } catch(err) {
-      await ctx.replyWithMarkdown(
-        msg + "\n\n_(QR image could not load. Use the UPI ID above)_",
-        actionButtons.length > 0 ? Markup.inlineKeyboard(actionButtons) : {}
-      );
+      await ctx.replyWithMarkdown(msg + "\n\n_(QR image could not load. Use the UPI ID above)_");
     }
   } else {
-    await ctx.replyWithMarkdown(msg, actionButtons.length > 0 ? Markup.inlineKeyboard(actionButtons) : {});
+    await ctx.replyWithMarkdown(msg);
   }
-}
+});
 
 // ─── Apply Coupon ───
 bot.action(/^applycoupon_(.+)$/, async (ctx) => {
@@ -996,14 +1013,27 @@ bot.command('broadcast', async (ctx) => {
 });
 
 // ─── /setqr ───
-bot.command('setqr', (ctx) => {
+bot.command('setqr', async (ctx) => {
   if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return;
   const newQr = ctx.message.text.replace('/setqr ', '').trim();
   if (!newQr || !newQr.startsWith('http')) {
     return ctx.reply("Usage: /setqr [Image URL]");
   }
-  config.UPI_QR_URL = newQr;
-  ctx.reply("✅ QR Code URL updated in memory.\n⚠️ To persist, update Vercel Environment Variables.");
+  await dbConnect();
+  await Setting.findOneAndUpdate({ key: 'UPI_QR_URL' }, { value: newQr }, { upsert: true });
+  ctx.reply("✅ UPI QR Code URL updated globally in Database!");
+});
+
+// ─── /setupi ───
+bot.command('setupi', async (ctx) => {
+  if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return;
+  const newUpi = ctx.message.text.replace('/setupi ', '').trim();
+  if (!newUpi || newUpi === '/setupi') {
+    return ctx.reply("Usage: /setupi [Your UPI ID]\nExample: /setupi 9999999999@ybl");
+  }
+  await dbConnect();
+  await Setting.findOneAndUpdate({ key: 'UPI_ID' }, { value: newUpi }, { upsert: true });
+  ctx.reply(`✅ UPI ID updated globally to: \`${newUpi}\``, { parse_mode: 'Markdown' });
 });
 
 // ─── /helpadmin ───
@@ -1027,7 +1057,8 @@ bot.command('helpadmin', (ctx) => {
     `   /toggleproduct — Enable/disable product\n\n` +
     `📢 *Communication:*\n` +
     `   /broadcast — Message all users\n` +
-    `   /setqr — Update QR code image`
+    `   /setqr — Update QR code image\n` +
+    `   /setupi — Update UPI ID`
   );
 });
 
@@ -1077,7 +1108,7 @@ bot.on('message', async (ctx, next) => {
         `💰 *You save ₹${product.price - discountedAmount}!*`
       );
 
-      await sendPaymentMessage(ctx, product, order);
+      await sendCheckoutSummary(ctx, product, order);
       return;
     } catch (e) {
       console.error("Coupon error:", e);
