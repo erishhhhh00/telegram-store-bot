@@ -287,6 +287,11 @@ bot.action(/^checkout_(.+)$/, async (ctx) => {
   const order = await Order.findById(orderId).populate('product');
   if (!order) return ctx.reply("❌ Order not found.");
 
+  if (order.status === 'pending') {
+    order.status = 'checkout';
+    await order.save();
+  }
+
   const upiId = await getSetting('UPI_ID', config.UPI_ID);
   const upiQr = await getSetting('UPI_QR_URL', config.UPI_QR_URL);
 
@@ -499,12 +504,16 @@ bot.on('photo', async (ctx) => {
   refundWaitingUsers.delete(ctx.from.id.toString());
 
   await dbConnect();
-  const order = await Order.findOne({ telegramId: ctx.from.id.toString(), status: 'pending' })
+  const order = await Order.findOne({ telegramId: ctx.from.id.toString(), status: 'checkout' })
     .sort({ createdAt: -1 })
     .populate('product');
   
   if (!order) {
-    return ctx.reply("❌ You have no pending orders. Type /start to browse products.");
+    const pendingOrder = await Order.findOne({ telegramId: ctx.from.id.toString(), status: 'pending' }).sort({ createdAt: -1 });
+    if (pendingOrder) {
+      return ctx.reply("⚠️ *Hold on!* Please click **'💳 Proceed to Pay'** on your Order Summary before sending the payment screenshot.", { parse_mode: 'Markdown' });
+    }
+    return ctx.reply("❌ You have no active orders waiting for payment. Type /start to browse products.");
   }
 
   const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
@@ -1092,7 +1101,7 @@ bot.on('message', async (ctx, next) => {
     try {
       await dbConnect();
       const order = await Order.findById(orderId).populate('product');
-      if (!order || order.status !== 'pending') {
+      if (!order || !['pending', 'checkout'].includes(order.status)) {
         return ctx.reply("❌ Order not found or already processed. /start to try again.");
       }
 
@@ -1111,6 +1120,7 @@ bot.on('message', async (ctx, next) => {
       order.amount = discountedAmount;
       order.originalAmount = product.price;
       order.couponApplied = enteredCode;
+      order.status = 'pending'; // Reset state so they must click Proceed to Pay again
       await order.save();
 
       await ctx.replyWithMarkdown(
