@@ -692,19 +692,39 @@ bot.command('addproduct', async (ctx) => {
   }
 
   try {
-    const [title, description, price, type, deliveryLink, imageUrl, couponCode, couponDiscount] = args;
+    let imageUrl = '';
+    let couponCode = '';
+    let couponDiscount = 0;
+
+    // Smart parsing for optional args (index 5, 6, 7)
+    if (args[5]) {
+      if (args[5].startsWith('http')) {
+        imageUrl = args[5];
+        if (args[6]) couponCode = args[6];
+        if (args[7]) couponDiscount = args[7];
+      } else {
+        // Skipped image URL, directly provided coupon code
+        couponCode = args[5];
+        if (args[6]) couponDiscount = args[6];
+      }
+    }
+
+    if (couponCode && !couponDiscount) {
+      return ctx.reply("❌ You provided a Coupon Code but missed the Discount %!\n\nIf you want to add a coupon, you must provide BOTH. Example:\n`... | DeliveryLink | ImageURL | GET50 | 50`\nOr if no image:\n`... | DeliveryLink | GET50 | 50`", { parse_mode: 'Markdown' });
+    }
+
     const productData = {
       title,
       description,
       price: Number(price),
       type,
       deliveryLink,
-      imageUrl: imageUrl || ''
+      imageUrl
     };
 
     if (couponCode) {
       productData.couponCode = couponCode.toUpperCase();
-      productData.couponDiscount = couponDiscount ? Number(couponDiscount) : 0;
+      productData.couponDiscount = Number(couponDiscount);
     }
 
     // Store pending product and show category buttons from DB
