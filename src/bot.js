@@ -848,6 +848,32 @@ bot.action(/^admincat_(.+)$/, async (ctx) => {
   }
 });
 
+// ─── /coupons ───
+bot.command('coupons', async (ctx) => {
+  if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return;
+  await dbConnect();
+  
+  const products = await Product.find({ couponCode: { $ne: '' }, couponCode: { $exists: true } });
+  
+  if (products.length === 0) {
+    return ctx.reply("🎟️ No products currently have an active coupon.");
+  }
+  
+  let msg = `🎟️ *ACTIVE COUPONS*\n━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  products.forEach(p => {
+    msg += `📦 *${p.title}* (ID: \`${p.productId || p._id}\`)\n`;
+    msg += `   🎟️ Code: \`${p.couponCode}\` — *${p.couponDiscount}% OFF*\n\n`;
+  });
+  
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `🛠️ *How to Edit/Delete?*\n`;
+  msg += `*To change code:* \`/editproduct ${products[0].productId || 'ID'} | couponCode | NEWCODE\`\n`;
+  msg += `*To change discount:* \`/editproduct ${products[0].productId || 'ID'} | couponDiscount | 50\`\n`;
+  msg += `*To remove coupon:* \`/editproduct ${products[0].productId || 'ID'} | couponCode | \`  _(Leave space after last |)_`;
+  
+  await ctx.replyWithMarkdown(msg);
+});
+
 // ─── /listproducts ───
 bot.command('listproducts', async (ctx) => {
   if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return;
@@ -1071,6 +1097,7 @@ bot.command('helpadmin', (ctx) => {
     `📦 *Product Management:*\n` +
     `   /addproduct — Add product (shows guide)\n` +
     `   /listproducts — View all products\n` +
+    `   /coupons — View active coupons\n` +
     `   /editproduct — Edit product field\n` +
     `   /deleteproduct — Soft delete product\n` +
     `   /toggleproduct — Enable/disable product\n\n` +
