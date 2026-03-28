@@ -9,6 +9,8 @@ const orderSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   originalAmount: { type: Number }, // Price before coupon discount
   couponApplied: { type: String, default: '' }, // Coupon code that was used
+  refundStatus: { type: String, enum: ['none', 'requested', 'approved', 'rejected'], default: 'none' },
+  refundReason: { type: String, default: '' },
   paymentMethod: { type: String, enum: ['qr', 'cashfree'], default: 'qr' }
 }, { timestamps: true });
 
