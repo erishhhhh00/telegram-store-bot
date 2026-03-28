@@ -31,11 +31,27 @@ const DESCRIPTION =
 const SHORT_DESCRIPTION =
   `🏪 India's Best Digital Store — Courses, APKs & More | ⚡ Instant Delivery | 💰 Best Prices | 🎟️ Coupons | 🔒 Secure UPI Pay`;
 
-// ─── Bot Command Menu ───
-const COMMANDS = [
+// ─── Bot Command Menus ───
+const USER_COMMANDS = [
   { command: "start", description: "🏪 Open Store — Main Menu" },
   { command: "search", description: "🔍 Search Products by Name" },
   { command: "myorders", description: "📦 View My Orders & Downloads" }
+];
+
+const ADMIN_COMMANDS = [
+  ...USER_COMMANDS,
+  { command: "addproduct", description: "➕ Add a new product" },
+  { command: "listproducts", description: "📋 View all products" },
+  { command: "editproduct", description: "✏️ Edit a product" },
+  { command: "deleteproduct", description: "🗑️ Soft delete a product" },
+  { command: "toggleproduct", description: "🔴 Enable/Disable product" },
+  { command: "categories", description: "📂 View all categories" },
+  { command: "addcategory", description: "➕ Add a new category" },
+  { command: "deletecategory", description: "🗑️ Delete a category" },
+  { command: "dashboard", description: "📊 View stats & revenue" },
+  { command: "broadcast", description: "📢 Send message to all users" },
+  { command: "setqr", description: "💳 Update UPI QR code" },
+  { command: "helpadmin", description: "🛠️ View all Admin commands" }
 ];
 
 async function callAPI(method, body) {
@@ -68,12 +84,12 @@ async function setup() {
     console.log("❌ Failed to set short description:", shortResult.description);
   }
 
-  // 3. Set Commands Menu
-  const cmdResult = await callAPI('setMyCommands', { commands: COMMANDS });
+  // 3. Set All Commands Menu for EVERYONE
+  const cmdResult = await callAPI('setMyCommands', { commands: ADMIN_COMMANDS, scope: { type: "default" } });
   if (cmdResult.ok) {
-    console.log("✅ Bot Command Menu set successfully!");
+    console.log("✅ All Command Menus set successfully!");
   } else {
-    console.log("❌ Failed to set commands:", cmdResult.description);
+    console.log("❌ Failed to set user commands:", cmdResult.description);
   }
 
   console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━");
