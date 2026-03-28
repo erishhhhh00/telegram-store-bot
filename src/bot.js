@@ -62,10 +62,9 @@ bot.start((ctx) => {
     `Courses, APKs, Data files — sab kuch yahan milega!\n\n` +
     `👇 *Choose an option below:*`,
     Markup.inlineKeyboard([
-      [Markup.button.callback('🛍️ Browse Products', 'action_products')],
-      [Markup.button.callback('📂 Browse by Category', 'action_categories')],
-      [Markup.button.callback('🔍 Search Products', 'action_search')],
-      [Markup.button.callback('📦 My Orders', 'action_myorders')],
+      [Markup.button.url('🎨 Apply Premium Dark Theme', 'https://t.me/bg/mP3FG_iwSFAFAAAA2AklJO978pA?bg_color=2c0b22~290020~160a22~3b1834&intensity=40')],
+      [Markup.button.callback('🛍️ Browse', 'action_products'), Markup.button.callback('📂 Categories', 'action_categories')],
+      [Markup.button.callback('🔍 Search', 'action_search'), Markup.button.callback('📦 My Orders', 'action_myorders')],
       [Markup.button.callback('📞 Help & Support', 'action_help')]
     ])
   );
