@@ -143,7 +143,7 @@ bot.action('action_categories', async (ctx) => {
 });
 
 // Category filter
-bot.action(/cat_(.+)/, async (ctx) => {
+bot.action(/^cat_(.+)$/, async (ctx) => {
   const category = ctx.match[1];
   await dbConnect();
   const products = await Product.find({ isActive: true, category });
@@ -226,7 +226,7 @@ async function performSearch(ctx, keyword) {
 }
 
 // ─── Buy Product ───
-bot.action(/buy_(.+)/, async (ctx) => {
+bot.action(/^buy_(.+)$/, async (ctx) => {
   const productId = ctx.match[1];
   await dbConnect();
   const product = await Product.findById(productId);
@@ -292,7 +292,7 @@ async function sendPaymentMessage(ctx, product, order) {
 }
 
 // ─── Apply Coupon ───
-bot.action(/applycoupon_(.+)/, async (ctx) => {
+bot.action(/^applycoupon_(.+)$/, async (ctx) => {
   const orderId = ctx.match[1];
   couponWaitingUsers.set(ctx.from.id.toString(), orderId);
   await ctx.reply("🎟️ Type your coupon code below:");
@@ -388,14 +388,14 @@ bot.action('action_refund_select', async (ctx) => {
   );
 });
 
-bot.action(/refund_(.+)/, async (ctx) => {
+bot.action(/^refund_(.+)$/, async (ctx) => {
   const orderId = ctx.match[1];
   refundWaitingUsers.set(ctx.from.id.toString(), orderId);
   await ctx.reply("📝 Please type the reason for your refund request:");
 });
 
 // Admin refund actions
-bot.action(/refundapprove_(.+)/, async (ctx) => {
+bot.action(/^refundapprove_(.+)$/, async (ctx) => {
   if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return ctx.answerCbQuery('Not Authorized');
   await dbConnect();
   const order = await Order.findById(ctx.match[1]).populate('product');
@@ -413,7 +413,7 @@ bot.action(/refundapprove_(.+)/, async (ctx) => {
   } catch(e) { console.error("Error notifying user about refund:", e); }
 });
 
-bot.action(/refundreject_(.+)/, async (ctx) => {
+bot.action(/^refundreject_(.+)$/, async (ctx) => {
   if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return ctx.answerCbQuery('Not Authorized');
   await dbConnect();
   const order = await Order.findById(ctx.match[1]).populate('product');
@@ -530,7 +530,7 @@ bot.on('photo', async (ctx) => {
 // ║         ADMIN APPROVAL ACTIONS          ║
 // ═══════════════════════════════════════════
 
-bot.action(/approve_(.+)/, async (ctx) => {
+bot.action(/^approve_(.+)$/, async (ctx) => {
   if (ctx.from.id.toString() !== config.ADMIN_USER_ID) {
     return ctx.answerCbQuery('Not Authorized');
   }
@@ -569,7 +569,7 @@ bot.action(/approve_(.+)/, async (ctx) => {
   }
 });
 
-bot.action(/reject_(.+)/, async (ctx) => {
+bot.action(/^reject_(.+)$/, async (ctx) => {
   if (ctx.from.id.toString() !== config.ADMIN_USER_ID) {
     return ctx.answerCbQuery('Not Authorized');
   }
@@ -702,9 +702,9 @@ bot.command('addproduct', async (ctx) => {
       imageUrl: imageUrl || ''
     };
 
-    if (couponCode && couponDiscount) {
+    if (couponCode) {
       productData.couponCode = couponCode.toUpperCase();
-      productData.couponDiscount = Number(couponDiscount);
+      productData.couponDiscount = couponDiscount ? Number(couponDiscount) : 0;
     }
 
     // Store pending product and show category buttons from DB
@@ -739,7 +739,7 @@ bot.command('addproduct', async (ctx) => {
 });
 
 // ─── Category selection for addproduct ───
-bot.action(/admincat_(.+)/, async (ctx) => {
+bot.action(/^admincat_(.+)$/, async (ctx) => {
   if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return ctx.answerCbQuery('Not Authorized');
   const selected = ctx.match[1];
   const userId = ctx.from.id.toString();
@@ -907,7 +907,7 @@ bot.command('deletecategory', async (ctx) => {
   );
 });
 
-bot.action(/delcat_(.+)/, async (ctx) => {
+bot.action(/^delcat_(.+)$/, async (ctx) => {
   if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return ctx.answerCbQuery('Not Authorized');
   const selected = ctx.match[1];
   if (selected === 'cancel') return ctx.editMessageText('❌ Cancelled.');
