@@ -279,6 +279,9 @@ async function sendCheckoutSummary(ctx, product, order) {
 
 // ─── Step 2: Final Payment Screen ───
 bot.action(/^checkout_(.+)$/, async (ctx) => {
+  const userId = ctx.from.id.toString();
+  couponWaitingUsers.delete(userId); // Clear if user was mid-typing a coupon
+  
   const orderId = ctx.match[1];
   await dbConnect();
   const order = await Order.findById(orderId).populate('product');
@@ -312,7 +315,7 @@ bot.action(/^checkout_(.+)$/, async (ctx) => {
 bot.action(/^applycoupon_(.+)$/, async (ctx) => {
   const orderId = ctx.match[1];
   couponWaitingUsers.set(ctx.from.id.toString(), orderId);
-  await ctx.reply("🎟️ Type your coupon code below:");
+  await ctx.replyWithMarkdown("🎟️ *Type your coupon code below:*\n\n_(Or just click '💳 Proceed to Pay' on the message above if you don't have one)_");
 });
 
 // ─── My Orders ───
@@ -1097,7 +1100,9 @@ bot.on('message', async (ctx, next) => {
       const enteredCode = txt.toUpperCase();
 
       if (!product.couponCode || product.couponCode.toUpperCase() !== enteredCode) {
-        return ctx.reply("❌ Invalid coupon code! Send payment screenshot to continue without coupon.");
+        await ctx.replyWithMarkdown("❌ *Invalid coupon code!*\nTry typing it again, or click **💳 Proceed to Pay** below to continue without a discount.");
+        await sendCheckoutSummary(ctx, product, order);
+        return;
       }
 
       const discount = product.couponDiscount;
