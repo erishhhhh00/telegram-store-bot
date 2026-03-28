@@ -777,6 +777,17 @@ bot.action(/^admincat_(.+)$/, async (ctx) => {
   try {
     await dbConnect();
     productData.category = selected;
+
+    // Generate unique 4-digit ID
+    let uniqueId;
+    let isUnique = false;
+    while (!isUnique) {
+      uniqueId = Math.floor(1000 + Math.random() * 9000).toString();
+      const existing = await Product.findOne({ productId: uniqueId });
+      if (!existing) isUnique = true;
+    }
+    productData.productId = uniqueId;
+
     const product = await Product.create(productData);
     pendingProductData.delete(userId);
 
@@ -787,7 +798,7 @@ bot.action(/^admincat_(.+)$/, async (ctx) => {
       `📦 *${productData.title}*\n` +
       `💰 Price: ₹${productData.price}\n` +
       `📂 Category: ${selected}\n` +
-      `🆔 ID: \`${product._id}\``;
+      `🆔 ID: \`${product.productId}\``;
     if (productData.couponCode) {
       successMsg += `\n🎟️ Coupon: ${productData.couponCode} → ${productData.couponDiscount}% OFF`;
     }
@@ -813,7 +824,7 @@ bot.command('listproducts', async (ctx) => {
     const status = p.isActive ? '🟢' : '🔴';
     text += `${status} ${idx + 1}. *${p.title}*\n`;
     text += `   💰 ₹${p.price} | 📂 ${p.category} | ${p.type}\n`;
-    text += `   🆔 \`${p._id}\`\n`;
+    text += `   🆔 \`${p.productId || p._id}\`\n`;
     if (p.couponCode) text += `   🎟️ ${p.couponCode} (${p.couponDiscount}% off)\n`;
     text += `\n`;
   });
@@ -847,7 +858,10 @@ bot.command('editproduct', async (ctx) => {
     }
 
     const updateValue = (field === 'price' || field === 'couponDiscount') ? Number(value) : value;
-    await Product.findByIdAndUpdate(id, { [field]: updateValue });
+    const query = id.length <= 6 ? { productId: id } : { _id: id };
+    const product = await Product.findOneAndUpdate(query, { [field]: updateValue }, { new: true });
+    
+    if (!product) return ctx.reply("❌ Product not found.");
     await ctx.replyWithMarkdown(`✅ *Product updated!*\n🔧 ${field} → \`${value}\``);
   } catch (e) {
     ctx.reply("❌ Error: " + e.message);
@@ -863,7 +877,9 @@ bot.command('deleteproduct', async (ctx) => {
   }
   try {
     await dbConnect();
-    await Product.findByIdAndUpdate(id, { isActive: false });
+    const query = id.length <= 6 ? { productId: id } : { _id: id };
+    const product = await Product.findOneAndUpdate(query, { isActive: false });
+    if (!product) return ctx.reply("❌ Product not found.");
     await ctx.reply("✅ Product deactivated (soft deleted). Use /toggleproduct to re-enable.");
   } catch (e) {
     ctx.reply("❌ Error: " + e.message);
@@ -879,8 +895,9 @@ bot.command('toggleproduct', async (ctx) => {
   }
   try {
     await dbConnect();
-    const product = await Product.findById(id);
-    if (!product) return ctx.reply("Product not found.");
+    const query = id.length <= 6 ? { productId: id } : { _id: id };
+    const product = await Product.findOne(query);
+    if (!product) return ctx.reply("❌ Product not found.");
     product.isActive = !product.isActive;
     await product.save();
     await ctx.reply(`✅ Product "${product.title}" is now ${product.isActive ? '🟢 Active' : '🔴 Inactive'}`);

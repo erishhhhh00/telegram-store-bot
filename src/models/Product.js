@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const productSchema = new mongoose.Schema({
+  productId: { type: String, required: true, unique: true }, // Simple 4-digit ID
   title: { type: String, required: true },
   description: { type: String, required: true },
   price: { type: Number, required: true }, // Price in INR
