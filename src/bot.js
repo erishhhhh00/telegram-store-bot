@@ -761,7 +761,7 @@ bot.command('addproduct', async (ctx) => {
 
     if (couponCode) {
       productData.couponCode = couponCode.toUpperCase();
-      productData.couponDiscount = Number(couponDiscount);
+      productData.couponDiscount = Number(String(couponDiscount).replace('%', '').trim());
     }
 
     // Store pending product and show category buttons from DB
@@ -895,6 +895,30 @@ bot.command('listproducts', async (ctx) => {
   await ctx.replyWithMarkdown(text);
 });
 
+// ─── /coupons ───
+bot.command('coupons', async (ctx) => {
+  if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return;
+  await dbConnect();
+  
+  const products = await Product.find({ couponCode: { $ne: '' }, couponDiscount: { $gt: 0 } });
+  
+  if (products.length === 0) {
+    return ctx.reply("🎟️ No active coupons found on any products.\n\nTo add a coupon, edit a product using:\n`/editproduct <id> | couponCode | NEWCODE`\n`/editproduct <id> | couponDiscount | 50%`", { parse_mode: 'Markdown' });
+  }
+
+  let text = `━━━━━━━━━━━━━━━━━━━━━\n🎟️ *ACTIVE COUPONS*\n━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  products.forEach((p, idx) => {
+    text += `${idx + 1}. *${p.title}*\n`;
+    text += `   🆔 \`${p.productId || p._id}\`\n`;
+    text += `   🎟️ Code: \`${p.couponCode}\`  |  Discount: *${p.couponDiscount}%*\n\n`;
+  });
+  
+  text += `_To change a coupon's %, copy ID and use:_ \n\`/editproduct ID | couponDiscount | 60%\`\n`;
+  text += `_To change code, use:_ \n\`/editproduct ID | couponCode | NEWCODE\``;
+  
+  await ctx.replyWithMarkdown(text);
+});
+
 // ─── /editproduct ───
 bot.command('editproduct', async (ctx) => {
   if (ctx.from.id.toString() !== config.ADMIN_USER_ID) return;
@@ -920,7 +944,7 @@ bot.command('editproduct', async (ctx) => {
       return ctx.reply(`❌ Invalid field. Allowed: ${allowedFields.join(', ')}`);
     }
 
-    const updateValue = (field === 'price' || field === 'couponDiscount') ? Number(value) : value;
+    const updateValue = (field === 'price' || field === 'couponDiscount') ? Number(String(value).replace('%', '').trim()) : value;
     const query = id.length <= 6 ? { productId: id } : { _id: id };
     const product = await Product.findOneAndUpdate(query, { [field]: updateValue }, { new: true });
     
