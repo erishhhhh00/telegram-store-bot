@@ -825,8 +825,9 @@ bot.action(/^admincat_(.+)$/, async (ctx) => {
     }
     productData.productId = uniqueId;
 
-    const product = await Product.create(productData);
+    // Immediately delete from memory to prevent duplicate webhook inserts
     pendingProductData.delete(userId);
+    const product = await Product.create(productData);
 
     let successMsg =
       `━━━━━━━━━━━━━━━━━━━━━\n` +
