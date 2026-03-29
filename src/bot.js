@@ -941,9 +941,10 @@ bot.command('deleteproduct', async (ctx) => {
   try {
     await dbConnect();
     const query = id.length <= 6 ? { productId: id } : { _id: id };
-    const product = await Product.findOneAndUpdate(query, { isActive: false });
+    const product = await Product.findOneAndDelete(query);
     if (!product) return ctx.reply("❌ Product not found.");
-    await ctx.reply("✅ Product deactivated (soft deleted). Use /toggleproduct to re-enable.");
+    await Order.deleteMany({ product: product._id });
+    await ctx.reply("✅ Product and its related orders permanently deleted from the database.");
   } catch (e) {
     ctx.reply("❌ Error: " + e.message);
   }
