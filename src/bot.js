@@ -116,8 +116,15 @@ bot.action('action_products', async (ctx) => {
 // ─── Helper: Get categories from DB ───
 async function getCategories() {
   await dbConnect();
-  const cats = await Category.find({}).sort({ createdAt: 1 });
-  return cats.map(c => c.name);
+  let cats = await Category.find({}).sort({ createdAt: 1 });
+  let catNames = cats.map(c => c.name);
+  
+  // Ensure "General" is always in the list if products exist in it
+  const hasGeneralProducts = await Product.exists({ category: 'General' });
+  if (hasGeneralProducts && !catNames.includes('General')) {
+    catNames.unshift('General');
+  }
+  return catNames;
 }
 
 // ─── Browse by Category ───
@@ -1095,13 +1102,26 @@ bot.command('broadcast', async (ctx) => {
   await dbConnect();
   const users = await User.find({});
   let sent = 0;
-  for (let u of users) {
-    try {
-      await bot.telegram.sendMessage(u.telegramId, `📢 *Announcement:*\n\n${msgText}`, { parse_mode: 'Markdown' });
-      sent++;
-    } catch(e) {}
+  let failed = 0;
+
+  await ctx.reply(`🚀 Starting broadcast to ${users.length} users...`);
+
+  // Send in batches to avoid hitting rate limits and for better speed
+  const batchSize = 25;
+  for (let i = 0; i < users.length; i += batchSize) {
+    const batch = users.slice(i, i + batchSize);
+    await Promise.all(batch.map(async (u) => {
+      try {
+        await bot.telegram.sendMessage(u.telegramId, `📢 *ANNOUNCEMENT*\n━━━━━━━━━━━━━━━━━━━━━\n\n${msgText}`, { parse_mode: 'Markdown' });
+        sent++;
+      } catch (e) {
+        failed++;
+      }
+    }));
+    // Small delay between batches to be safe with Telegram
+    if (i + batchSize < users.length) await new Promise(r => setTimeout(r, 500));
   }
-  await ctx.reply(`✅ Broadcast sent to ${sent}/${users.length} users.`);
+  await ctx.reply(`✅ *Broadcast Complete!*\n\n👥 Total Users: ${users.length}\n✅ Sent: ${sent}\n❌ Failed/Blocked: ${failed}`, { parse_mode: 'Markdown' });
 });
 
 // ─── /setqr ───
