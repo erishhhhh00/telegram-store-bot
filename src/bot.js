@@ -1061,6 +1061,7 @@ bot.action(/^delcat_(.+)$/, async (ctx) => {
   try {
     await dbConnect();
     await Category.deleteOne({ name: selected });
+    await Product.updateMany({ category: selected }, { category: 'General' });
     const remaining = await getCategories();
     let msg = `✅ *Deleted:* ${selected}\n\n📂 *Remaining Categories:*\n`;
     if (remaining.length === 0) msg += '   _None_';
@@ -1145,7 +1146,7 @@ bot.command('helpadmin', (ctx) => {
     `   /listproducts — View all products\n` +
     `   /coupons — View active coupons\n` +
     `   /editproduct — Edit product field\n` +
-    `   /deleteproduct — Soft delete product\n` +
+    `   /deleteproduct — Permanently delete product\n` +
     `   /toggleproduct — Enable/disable product\n\n` +
     `📢 *Communication:*\n` +
     `   /broadcast — Message all users\n` +
