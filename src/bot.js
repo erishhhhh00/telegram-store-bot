@@ -287,6 +287,10 @@ bot.action(/^checkout_(.+)$/, async (ctx) => {
   const order = await Order.findById(orderId).populate('product');
   if (!order) return ctx.reply("❌ Order not found.");
 
+  if (!order.product || !order.product.isActive) {
+    return ctx.reply("❌ Product is no longer available.");
+  }
+
   if (order.status === 'pending') {
     order.status = 'checkout';
     await order.save();
@@ -358,7 +362,8 @@ async function showMyOrders(ctx) {
     else if (o.refundStatus === 'approved') refundInfo = '\n   ↳ ✅ _Refund Approved_';
     else if (o.refundStatus === 'rejected') refundInfo = '\n   ↳ ❌ _Refund Rejected_';
 
-    text += `${statusEmoji} *${o.product.title}*\n`;
+    const pTitle = o.product ? o.product.title : '[Deleted Product]';
+    text += `${statusEmoji} *${pTitle}*\n`;
     text += `   💰 ₹${o.amount}${couponInfo} — ${statusText}\n`;
     text += `   📅 ${date}${refundInfo}\n\n`;
   }
@@ -384,7 +389,9 @@ bot.action('action_mypurchases', async (ctx) => {
 
   let text = `━━━━━━━━━━━━━━━━━━━━━\n🔗 *YOUR DOWNLOADS*\n━━━━━━━━━━━━━━━━━━━━━\n\n`;
   orders.forEach((o, idx) => {
-    text += `${idx + 1}. *${o.product.title}*\n   💰 ₹${o.amount}\n   🔗 ${o.product.deliveryLink}\n\n`;
+    const title = o.product ? o.product.title : '[Deleted Product]';
+    const link = o.product ? o.product.deliveryLink : 'Link Unavailable';
+    text += `${idx + 1}. *${title}*\n   💰 ₹${o.amount}\n   🔗 ${link}\n\n`;
   });
   await ctx.replyWithMarkdown(text);
 });
@@ -402,9 +409,10 @@ bot.action('action_refund_select', async (ctx) => {
     return ctx.reply("No eligible orders for refund.");
   }
 
-  const buttons = orders.map(o => [
-    Markup.button.callback(`🔄 ${o.product.title} — ₹${o.amount}`, `refund_${o._id}`)
-  ]);
+  const buttons = orders.map(o => {
+    const title = o.product ? o.product.title : 'Deleted Product';
+    return [Markup.button.callback(`🔄 ${title} — ₹${o.amount}`, `refund_${o._id}`)];
+  });
   buttons.push([Markup.button.callback('⬅️ Cancel', 'action_myorders')]);
 
   await ctx.replyWithMarkdown(
@@ -573,6 +581,10 @@ bot.action(/^approve_(.+)$/, async (ctx) => {
   order.status = 'approved';
   await order.save();
 
+  if (!order.product) {
+    return ctx.editMessageCaption('❌ Product was deleted. Cannot approve.');
+  }
+
   let couponInfo = '';
   if (order.couponApplied) {
     couponInfo = `\n🎟️ Coupon: ${order.couponApplied}`;
@@ -611,11 +623,12 @@ bot.action(/^reject_(.+)$/, async (ctx) => {
 
   order.status = 'rejected';
   await order.save();
-  await ctx.editMessageCaption(`❌ *Order Rejected*\n📦 ${order.product.title}`, { parse_mode: 'Markdown' });
+  const title = order.product ? order.product.title : 'Deleted Product';
+  await ctx.editMessageCaption(`❌ *Order Rejected*\n📦 ${title}`, { parse_mode: 'Markdown' });
 
   try {
     await bot.telegram.sendMessage(order.telegramId,
-      `❌ *Payment Rejected*\n\nYour payment for *${order.product.title}* was rejected.\nIf this is a mistake, please contact support or try again.`,
+      `❌ *Payment Rejected*\n\nYour payment for *${title}* was rejected.\nIf this is a mistake, please contact support or try again.`,
       { parse_mode: 'Markdown' }
     );
   } catch (err) {
@@ -950,6 +963,13 @@ bot.command('editproduct', async (ctx) => {
     const product = await Product.findOneAndUpdate(query, { [field]: updateValue }, { new: true });
     
     if (!product) return ctx.reply("❌ Product not found.");
+
+    if (field === 'price') {
+      await Order.updateMany({ product: product._id, status: 'pending' }, { $set: { amount: updateValue, originalAmount: updateValue, couponApplied: '' } });
+    } else if (field === 'couponDiscount' || field === 'couponCode') {
+      await Order.updateMany({ product: product._id, status: 'pending' }, { $set: { couponApplied: '' } });
+    }
+
     await ctx.replyWithMarkdown(`✅ *Product updated!*\n🔧 ${field} → \`${value}\``);
   } catch (e) {
     ctx.reply("❌ Error: " + e.message);
@@ -968,8 +988,8 @@ bot.command('deleteproduct', async (ctx) => {
     const query = id.length <= 6 ? { productId: id } : { _id: id };
     const product = await Product.findOneAndDelete(query);
     if (!product) return ctx.reply("❌ Product not found.");
-    await Order.deleteMany({ product: product._id });
-    await ctx.reply("✅ Product and its related orders permanently deleted from the database.");
+    await Order.deleteMany({ product: product._id, status: { $in: ['pending', 'checkout'] } });
+    await ctx.reply("✅ Product permanently deleted. Open checkouts cleared, but past approved purchases were preserved for users.");
   } catch (e) {
     ctx.reply("❌ Error: " + e.message);
   }
