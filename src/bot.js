@@ -82,9 +82,6 @@ bot.action('action_products', async (ctx) => {
 
   for (const p of products) {
     let couponTag = '';
-    if (p.couponCode && p.couponDiscount > 0) {
-      couponTag = `\n🎟️ *Coupon Available!* — Save ${p.couponDiscount}%`;
-    }
 
     const typeEmoji = p.type === 'course' ? '📚' : p.type === 'apk' ? '📱' : '💾';
     const timeAgo = getTimeAgo(p.createdAt);
@@ -162,9 +159,6 @@ bot.action(/^cat_(.+)$/, async (ctx) => {
   for (const p of products) {
     const typeEmoji = p.type === 'course' ? '📚' : p.type === 'apk' ? '📱' : '💾';
     let couponTag = '';
-    if (p.couponCode && p.couponDiscount > 0) {
-      couponTag = `\n🎟️ *Coupon Available!* — Save ${p.couponDiscount}%`;
-    }
 
     const caption =
       `${typeEmoji} *${p.title}*\n` +
