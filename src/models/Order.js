@@ -11,7 +11,9 @@ const orderSchema = new mongoose.Schema({
   couponApplied: { type: String, default: '' }, // Coupon code that was used
   refundStatus: { type: String, enum: ['none', 'requested', 'approved', 'rejected'], default: 'none' },
   refundReason: { type: String, default: '' },
-  paymentMethod: { type: String, enum: ['qr', 'cashfree'], default: 'qr' }
+  paymentMethod: { type: String, enum: ['qr', 'cashfree'], default: 'qr' },
+  productName: { type: String }, // Snapshot of title
+  productLink: { type: String }  // Snapshot of link so users don't lose access if product is deleted
 }, { timestamps: true });
 
 module.exports = mongoose.models.Order || mongoose.model('Order', orderSchema);

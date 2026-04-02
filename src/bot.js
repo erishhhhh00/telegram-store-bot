@@ -238,6 +238,8 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
     user: ctx.dbUser._id,
     telegramId: ctx.from.id.toString(),
     product: product._id,
+    productName: product.title,
+    productLink: product.deliveryLink,
     amount: product.price,
     originalAmount: product.price,
     status: 'pending'
@@ -363,7 +365,7 @@ async function showMyOrders(ctx) {
     else if (o.refundStatus === 'approved') refundInfo = '\n   ↳ ✅ _Refund Approved_';
     else if (o.refundStatus === 'rejected') refundInfo = '\n   ↳ ❌ _Refund Rejected_';
 
-    const pTitle = o.product ? o.product.title : '[Deleted Product]';
+    const pTitle = o.productName || (o.product ? o.product.title : '[Deleted Product]');
     text += `${statusEmoji} *${pTitle}*\n`;
     text += `   💰 ₹${o.amount}${couponInfo} — ${statusText}\n`;
     text += `   📅 ${date}${refundInfo}\n\n`;
@@ -390,8 +392,8 @@ bot.action('action_mypurchases', async (ctx) => {
 
   let text = `━━━━━━━━━━━━━━━━━━━━━\n🔗 *YOUR DOWNLOADS*\n━━━━━━━━━━━━━━━━━━━━━\n\n`;
   orders.forEach((o, idx) => {
-    const title = o.product ? o.product.title : '[Deleted Product]';
-    const link = o.product ? o.product.deliveryLink : 'Link Unavailable';
+    const title = o.productName || (o.product ? o.product.title : '[Deleted Product]');
+    const link = o.productLink || (o.product ? o.product.deliveryLink : 'Link Unavailable');
     text += `${idx + 1}. *${title}*\n   💰 ₹${o.amount}\n   🔗 ${link}\n\n`;
   });
   await ctx.replyWithMarkdown(text);
@@ -411,7 +413,7 @@ bot.action('action_refund_select', async (ctx) => {
   }
 
   const buttons = orders.map(o => {
-    const title = o.product ? o.product.title : 'Deleted Product';
+    const title = o.productName || (o.product ? o.product.title : 'Deleted Product');
     return [Markup.button.callback(`🔄 ${title} — ₹${o.amount}`, `refund_${o._id}`)];
   });
   buttons.push([Markup.button.callback('⬅️ Cancel', 'action_myorders')]);
