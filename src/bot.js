@@ -1197,6 +1197,8 @@ bot.on('message', async (ctx, next) => {
       const enteredCode = txt.toUpperCase();
 
       if (!product.couponCode || product.couponCode.toUpperCase() !== enteredCode) {
+        // Re-add to waiting list since we ask them to "Try typing it again"
+        couponWaitingUsers.set(userId, orderId);
         await ctx.replyWithMarkdown("❌ *Invalid coupon code!*\nTry typing it again, or click **💳 Proceed to Pay** below to continue without a discount.");
         await sendCheckoutSummary(ctx, product, order);
         return;
